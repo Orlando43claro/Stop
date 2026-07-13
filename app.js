@@ -29,6 +29,7 @@ const revanchaTexto = document.getElementById('revancha-texto');
 const revanchaBotones = document.getElementById('revancha-botones');
 const btnVolverLobby = document.getElementById('btn-volver-lobby');
 const marcadorSuperior = document.getElementById('marcador-superior');
+const btnStop = document.getElementById('btn-stop');
 
 // --- 1. OBSERVADOR DE SESIÓN EN FIREBASE ---
 onAuthStateChanged(auth, async (user) => {
@@ -83,7 +84,6 @@ document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
     signOut(auth);
 });
 
-// Muestra única y exclusivamente tus puntos históricos
 function conectarMisPuntosPermanentes(uid) {
     onSnapshot(doc(db, "usuarios", uid), (docSnap) => {
         if(docSnap.exists()) {
@@ -93,7 +93,30 @@ function conectarMisPuntosPermanentes(uid) {
     });
 }
 
-// --- 2. LOGICA DE EMPAREJAMIENTO PÚBLICO (CORREGIDA) ---
+// --- VALIDADOR EN TIEMPO REAL PARA EL BOTÓN STOP ---
+const inputsJuego = document.querySelectorAll('.input-juego');
+inputsJuego.forEach(input => {
+    input.addEventListener('input', () => {
+        let todosLlenos = true;
+        inputsJuego.forEach(i => {
+            if (i.value.trim() === "") {
+                todosLlenos = false;
+            }
+        });
+
+        if (todosLlenos) {
+            btnStop.disabled = false;
+            btnStop.style.opacity = "1";
+            btnStop.style.cursor = "pointer";
+        } else {
+            btnStop.disabled = true;
+            btnStop.style.opacity = "0.5";
+            btnStop.style.cursor = "not-allowed";
+        }
+    });
+});
+
+// --- 2. LOGICA DE EMPAREJAMIENTO PÚBLICO ---
 document.getElementById('btn-buscar-publica').addEventListener('click', async () => {
     lobbyOptions.classList.add('hidden');
     matchmakingStatus.classList.remove('hidden');
@@ -110,7 +133,6 @@ document.getElementById('btn-buscar-publica').addEventListener('click', async ()
                 idPartidaActiva = docSnap.id;
                 salaEncontrada = true;
                 
-                // Al unirse el rival, cambiamos el estado a "esperando" para romper el bucle de carga en ambas pantallas
                 await updateDoc(doc(db, "partidas", idPartidaActiva), {
                     jugadores: arrayUnion(miNombre),
                     estado: "esperando"
@@ -237,6 +259,11 @@ function conectarAlJuego(idSala) {
             
             revanchaBox.classList.add('hidden');
             btnVolverLobby.classList.remove('hidden');
+            
+            // Forzar reseteo del estado del botón STOP para la nueva partida
+            btnStop.disabled = true;
+            btnStop.style.opacity = "0.5";
+            btnStop.style.cursor = "not-allowed";
         } 
         else if (datos.estado === "jugando") {
             screenLobby.classList.add('hidden');
@@ -287,9 +314,8 @@ function conectarAlJuego(idSala) {
     });
 }
 
-// --- 6. RENDER DE TABLAS Y MARCADORES (MODIFICADO SOLO PARA TUS PUNTOS) ---
+// --- 6. RENDER DE TABLAS Y MARCADORES ---
 async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadores) {
-    // Mantiene en pantalla superior únicamente tus puntos actualizados, ocultando los del rival
     if (auth.currentUser) {
         const userDoc = await getDoc(doc(db, "usuarios", auth.currentUser.uid));
         if (userDoc.exists()) {
@@ -322,7 +348,6 @@ async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadore
     Object.keys(respuestas).forEach(jugador => {
         const r = respuestas[jugador];
         const tr = document.createElement('tr');
-        // Se añade la columna de Animal en la vista de resultados
         tr.innerHTML = `
             <td><strong>${jugador}</strong></td>
             <td>${r.nombre}</td>
@@ -401,16 +426,15 @@ async function enviarRespuestasTardias(respuestasActuales, salaRef) {
     }
 }
 
-// --- 9. MOTOR DE CÁLCULO CON LA CATEGORÍA ANIMAL INCLUIDA ---
+// --- 9. MOTOR DE CÁLCULO DE PUNTOS ---
 function calcularPuntosRonda(respuestas, letraActiva) {
     const jugadores = Object.keys(respuestas);
     const puntajes = {};
-    // Añadido 'animal' a la lista de validación de texto
-    const categorias = ['nombre', 'apellido', 'ciudad', 'fruta', 'color', 'animal'];
+    const categories = ['nombre', 'apellido', 'ciudad', 'fruta', 'color', 'animal'];
 
     jugadores.forEach(j => puntajes[j] = 0);
 
-    categorias.forEach(cat => {
+    categories.forEach(cat => {
         const registroPalabras = [];
         jugadores.forEach(j => {
             const palabra = respuestas[j][cat] ? respuestas[j][cat].trim().toLowerCase() : '-';
