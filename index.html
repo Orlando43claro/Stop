@@ -3,77 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>STOP! Arena - Ingresar</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
-        body { background: linear-gradient(135deg, #0f0c1b 0%, #1a103c 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #fff; }
-        .card { background: rgba(25, 18, 50, 0.95); padding: 40px 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); text-align: center; max-width: 400px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.05); }
-        h1 { font-size: 32px; font-weight: 900; background: linear-gradient(45deg, #ff007f, #7000ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }
-        p { color: #b9b6d3; margin-bottom: 30px; font-size: 14px; }
-        .btn-google { background: #fff; color: #000; font-weight: bold; padding: 14px; border: none; border-radius: 10px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; font-size: 16px; transition: transform 0.2s; }
-        .btn-google:hover { transform: scale(1.02); background: #f1f1f1; }
-    </style>
+    <title>¡STOP! Multijugador</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-    <div class="card">
-        <h1>STOP! MULTIPLAYER</h1>
-        <p>Inicia sesión para guardar tus monedas, apuestas y victorias en la nube.</p>
-        <button id="btn-login" class="btn-google">
-            <img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/web-24dp/copy_vector.svg" alt="Google" width="20">
-            Continuar con Google
-        </button>
-    </div>
+    <header class="game-header">
+        <h1>¡STOP! Online</h1>
+        <div id="user-badge" class="badge"></div>
+    </header>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    <main class="container">
+        <section id="screen-lobby" class="card">
+            <h2>Ingresar a la Sala</h2>
+            <div class="form-group" id="login-box">
+                <input type="text" id="username" placeholder="Tu Apodo / Nombre" required>
+                <button id="btn-entrar" class="btn">Unirse a la partida</button>
+            </div>
+            <div id="lobby-status" class="hidden">
+                <p class="loading">Esperando que se inicie la ronda...</p>
+                <button id="btn-iniciar-juego" class="btn btn-start">Iniciar Juego</button>
+            </div>
+        </section>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyDbg6O6VUUBfh0BMVbSaJe1WOmSZwoOBhg",
-            authDomain: "stop-e29f9.firebaseapp.com",
-            projectId: "stop-e29f9",
-            storageBucket: "stop-e29f9.firebasestorage.app",
-            messagingSenderId: "640082897243",
-            appId: "1:640082897243:web:2a0e913941b84227bd527e"
-        };
+        <section id="screen-game" class="card hidden">
+            <div class="game-info">
+                <div class="letra-box">Letra: <span id="active-letter">-</span></div>
+            </div>
+            
+            <form id="stop-form">
+                <div class="form-group">
+                    <label>Nombre</label>
+                    <input type="text" id="ans-nombre" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Apellido</label>
+                    <input type="text" id="ans-apellido" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Ciudad / País</label>
+                    <input type="text" id="ans-ciudad" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Fruta / Alimento</label>
+                    <input type="text" id="ans-fruta" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Color</label>
+                    <input type="text" id="ans-color" autocomplete="off">
+                </div>
+                
+                <button type="button" id="btn-stop" class="btn btn-danger">¡¡STOP!!</button>
+            </form>
+        </section>
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
+        <section id="screen-results" class="card hidden">
+            <h2>Resultados de la ronda</h2>
+            <p id="stop-announcer"></p>
+            <div class="table-responsive">
+                <table id="results-table">
+                    <thead>
+                        <tr>
+                            <th>Jugador</th>
+                            <th>Nom</th>
+                            <th>Ape</th>
+                            <th>Ciu</th>
+                            <th>Fru</th>
+                            <th>Col</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body"></tbody>
+                </table>
+            </div>
+            <button id="btn-volver-lobby" class="btn" style="margin-top: 20px;">Nueva Ronda</button>
+        </section>
+    </main>
 
-        // Si ya está logueado, redirigir automáticamente al menú
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                window.location.href = "menu.html";
-            }
-        });
-
-        document.getElementById('btn-login').addEventListener('click', async () => {
-            try {
-                const result = await signInWithPopup(auth, provider);
-                const user = result.user;
-
-                // Verificar si es un usuario nuevo en Firestore para regalarle monedas iniciales
-                const userRef = doc(db, "usuarios", user.uid);
-                const userSnap = await getDoc(userRef);
-
-                if (!userSnap.exists()) {
-                    await setDoc(userRef, {
-                        nombre: user.displayName,
-                        email: user.email,
-                        monedas: 200 // Monedas de regalo iniciales para apostar
-                    });
-                }
-
-                window.location.href = "menu.html";
-            } catch (error) {
-                console.error("Error en login:", error);
-                alert("No se pudo iniciar sesión con Google.");
-            }
-        });
-    </script>
+    <script type="module" src="firebase-config.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>
