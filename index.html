@@ -1,99 +1,79 @@
 <!DOCTYPE html>
-<head><title>developer</title>
-
-<style>
-*{padding: 0;
-margin: 0;
-
-}
-
-body{width:100%; height: 100%; background: #ffffff;}
-  
-  .section01{margin: 5px;  height: 12px; width:80%; }
-.section01 img{ height: 12px; float: right;}
-
-
-.container{ 
-height: 150px; width:100%;}
-
-#section1{
-width:44%; height: 150px; float: right; }
-#section1 img{border: 1px solid black; border-radius: 10px; padding: 5px; margin: 10px; }
-
-#section2{
-width:55%; height: 100px;}
-#titulo{ padding: 15px; margin: 10px; text-align: center;}
-
-#section3{
-width:55%; height: 49px; display: flex;}
-
-#section4{ width:50%; height: 49px; margin: 10px; text-align: center;}
-#linea{ height: 49px; border:  1px solid black;}
-#section5{width:50%; height: 49px; float: right; margin: 10px; text-align: center;}
-
-
-
-.nav{ width: 90%; height: 40px; margin: 10px; 10px; text-align: center;}
-.nav a{display: block; width: 80px; height: 18px; padding: 5px; background: #008000; border-radius: 10px; color: #ffffff;  text-decoration: none; float: right;}
-
-
-.main{   width:100%;  max-height: 220px;  display: flex; overflow-x: auto;}
-#section6 img{ border: 1px solid black; border-radius: 10px; height: 200px; width: 130px;  display: flex;}
-#section6{ margin: 5px; border-radius: 10px;  display: flex;}
-
-.footer{ width:90%; height: 100%; margin: 10px; }
-p{padding: 10px; }
-</style>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STOP! Arena - Ingresar</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+        body { background: linear-gradient(135deg, #0f0c1b 0%, #1a103c 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #fff; }
+        .card { background: rgba(25, 18, 50, 0.95); padding: 40px 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); text-align: center; max-width: 400px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.05); }
+        h1 { font-size: 32px; font-weight: 900; background: linear-gradient(45deg, #ff007f, #7000ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }
+        p { color: #b9b6d3; margin-bottom: 30px; font-size: 14px; }
+        .btn-google { background: #fff; color: #000; font-weight: bold; padding: 14px; border: none; border-radius: 10px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; font-size: 16px; transition: transform 0.2s; }
+        .btn-google:hover { transform: scale(1.02); background: #f1f1f1; }
+    </style>
 </head>
 <body>
-  <section class="section01">
-  <img style="border: 0px solid; display: inline;" alt="contador de visitas" src="https://websmultimedia.com/contador-de-visitas.php?id=6595">
- </section>
-  
-  
-<div class="container">
-<section id="section1"><img src="1.webp" width="110"  height="110">
-</section>
 
-<section id="section2"><center><h2 id="titulo">Groovy</h2></center>
-</section>
+    <div class="card">
+        <h1>STOP! MULTIPLAYER</h1>
+        <p>Inicia sesión para guardar tus monedas, apuestas y victorias en la nube.</p>
+        <button id="btn-login" class="btn-google">
+            <img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/web-24dp/copy_vector.svg" alt="Google" width="20">
+            Continuar con Google
+        </button>
+    </div>
 
-<section id="section3">
-<div id="section4">Versión<br>4.0.1
-</div>
-<div id="linea"></div>
-<div id="section5">Tamaño<br>10MB
-</div>
-</section>
-</div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-<div class="nav"> 
-<a href="Groovy_4.0.1_developer-shop.apk" download=" Groovy_4.0.1_developer-shop " ><center>Descargar</center></a>
-</div>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDbg6O6VUUBfh0BMVbSaJe1WOmSZwoOBhg",
+            authDomain: "stop-e29f9.firebaseapp.com",
+            projectId: "stop-e29f9",
+            storageBucket: "stop-e29f9.firebasestorage.app",
+            messagingSenderId: "640082897243",
+            appId: "1:640082897243:web:2a0e913941b84227bd527e"
+        };
 
-<div class="main">
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
 
-<section id="section6">
-<img src="2.webp" >
-</section>
-<section id="section6">
-<img src="3.webp">
-</section>
-<section id="section6">
-<img src="4.webp"  >
-</section>
-<section id="section6">
-<img src="5.webp" >
-</section>
-<section id="section6">
-<img src="6.webp" >
-</section>
-</div>
+        // Si ya está logueado, redirigir automáticamente al menú
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.location.href = "menu.html";
+            }
+        });
 
-<div class="footer">
-<p>
-<h4>Descripción:</h4><br><p> Con groovy tus días aburridos serán extraordinarios.</p>
+        document.getElementById('btn-login').addEventListener('click', async () => {
+            try {
+                const result = await signInWithPopup(auth, provider);
+                const user = result.user;
 
-</div>
+                // Verificar si es un usuario nuevo en Firestore para regalarle monedas iniciales
+                const userRef = doc(db, "usuarios", user.uid);
+                const userSnap = await getDoc(userRef);
+
+                if (!userSnap.exists()) {
+                    await setDoc(userRef, {
+                        nombre: user.displayName,
+                        email: user.email,
+                        monedas: 200 // Monedas de regalo iniciales para apostar
+                    });
+                }
+
+                window.location.href = "menu.html";
+            } catch (error) {
+                console.error("Error en login:", error);
+                alert("No se pudo iniciar sesión con Google.");
+            }
+        });
+    </script>
 </body>
 </html>
