@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>¡STOP! Multijugador</title>
+    <title>¡STOP! Multijugador Online</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -15,14 +15,44 @@
 
     <main class="container">
         <section id="screen-lobby" class="card">
-            <h2>Ingresar a la Sala</h2>
+            <h2>Panel de Control</h2>
+            
             <div class="form-group" id="login-box">
-                <input type="text" id="username" placeholder="Tu Apodo / Nombre" required>
-                <button id="btn-entrar" class="btn">Unirse a la partida</button>
+                <label for="username">Tu Apodo / Nombre</label>
+                <input type="text" id="username" placeholder="Ej. Orlando" required>
+                <button id="btn-guardar-nombre" class="btn">Confirmar Nombre</button>
             </div>
-            <div id="lobby-status" class="hidden">
-                <p class="loading">Esperando que se inicie la ronda...</p>
-                <button id="btn-iniciar-juego" class="btn btn-start">Iniciar Juego</button>
+
+            <div id="lobby-options" class="hidden">
+                <button id="btn-buscar-publica" class="btn btn-start">🔍 Buscar Partida Online</button>
+                <div class="separator">ó</div>
+                <button id="btn-abrir-crear-privada" class="btn">🔒 Crear Sala Privada</button>
+                <button id="btn-abrir-unirse-privada" class="btn" style="background: #64748b; margin-top: 10px;">🔑 Unirse con Código</button>
+            </div>
+
+            <div id="pin-creation-box" class="hidden game-mode-box">
+                <h3>Crear Sala Privada</h3>
+                <input type="number" id="create-pin" placeholder="PIN de 4 dígitos" oninput="if(this.value.length > 4) this.value = this.value.slice(0,4);">
+                <button id="btn-confirmar-crear-privada" class="btn">Crear y Esperar Amigo</button>
+            </div>
+
+            <div id="pin-join-box" class="hidden game-mode-box">
+                <h3>Unirse a Sala Privada</h3>
+                <input type="number" id="join-pin" placeholder="Ingresa PIN de 4 dígitos" oninput="if(this.value.length > 4) this.value = this.value.slice(0,4);">
+                <button id="btn-confirmar-unirse-privada" class="btn">Entrar a la Sala</button>
+            </div>
+
+            <div id="matchmaking-status" class="hidden">
+                <div class="spinner-ruleta"></div>
+                <p class="loading">Buscando rivales online...</p>
+                <button id="btn-cancelar-busqueda" class="btn btn-danger" style="padding: 10px; font-size: 14px; width: auto; margin-top: 10px;">Cancelar</button>
+            </div>
+
+            <div id="lobby-waiting" class="hidden" style="margin-top: 20px;">
+                <h3>Sala de Espera</h3>
+                <p id="room-info-display" style="color: #f59e0b; margin-bottom: 12px; font-weight: bold;"></p>
+                <div id="players-list"></div>
+                <button id="btn-iniciar-juego" class="btn btn-start" style="margin-top: 15px;">¡Iniciar Ronda!</button>
             </div>
         </section>
 
@@ -58,7 +88,7 @@
         </section>
 
         <section id="screen-results" class="card hidden">
-            <h2>Resultados de la ronda</h2>
+            <h2>Resultados de la Ronda</h2>
             <p id="stop-announcer"></p>
             <div class="table-responsive">
                 <table id="results-table">
@@ -75,7 +105,7 @@
                     <tbody id="results-body"></tbody>
                 </table>
             </div>
-            <button id="btn-volver-lobby" class="btn" style="margin-top: 20px;">Nueva Ronda</button>
+            <button id="btn-volver-lobby" class="btn" style="margin-top: 20px;">Nueva Ronda / Volver</button>
         </section>
     </main>
 
