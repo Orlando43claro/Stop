@@ -1,5 +1,4 @@
 import { db } from "./firebase-config.js";
-// Importamos módulos de Auth necesarios
 import { 
     getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -34,7 +33,6 @@ const marcadorSuperior = document.getElementById('marcador-superior');
 // --- 1. OBSERVADOR DE SESIÓN EN FIREBASE ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        // Buscamos su Apodo guardado en Firestore usando su UID único
         const userDoc = await getDoc(doc(db, "usuarios", user.uid));
         if (userDoc.exists()) {
             miNombre = userDoc.data().nombre;
@@ -44,7 +42,6 @@ onAuthStateChanged(auth, async (user) => {
             conectarMisPuntosPermanentes(user.uid);
         }
     } else {
-        // No hay sesión activa, login obligatorio
         miNombre = "";
         document.getElementById('user-badge').textContent = "Inicia sesión";
         marcadorSuperior.innerHTML = "";
@@ -53,7 +50,6 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// Mecanismo unificado de Entrada / Registro Directo
 document.getElementById('btn-ingresar-auth').addEventListener('click', async () => {
     const email = document.getElementById('user-email').value.trim();
     const password = document.getElementById('user-password').value;
@@ -62,16 +58,13 @@ document.getElementById('btn-ingresar-auth').addEventListener('click', async () 
     if(!email || !password) return alert("Ingresa tu correo y contraseña");
 
     try {
-        // Intentar iniciar sesión primero
         await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-        // Si el usuario no existe, lo registramos automáticamente
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-            if(!apodoInput) return alert("Tu cuenta no existe. Por favor introduce un Apodo para crearte una cuenta nueva.");
+            if(!apodoInput) return alert("Tu cuenta no existe. Introduce un Apodo para registrarte.");
             
             try {
                 const credenciales = await createUserWithEmailAndPassword(auth, email, password);
-                // Vinculamos su apodo y puntos iniciales en Firestore
                 await setDoc(doc(db, "usuarios", credenciales.user.uid), {
                     nombre: apodoInput,
                     puntosTotales: 0,
@@ -86,22 +79,21 @@ document.getElementById('btn-ingresar-auth').addEventListener('click', async () 
     }
 });
 
-// Botón de Cerrar Sesión
 document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
     signOut(auth);
 });
 
-// Escucha en tiempo real de mis puntos en la nube (Cuando estoy fuera de partida)
+// Muestra única y exclusivamente tus puntos históricos
 function conectarMisPuntosPermanentes(uid) {
     onSnapshot(doc(db, "usuarios", uid), (docSnap) => {
-        if(docSnap.exists() && !idPartidaActiva) {
+        if(docSnap.exists()) {
             const datos = docSnap.data();
             marcadorSuperior.innerHTML = `<span>Tu Record Histórico: <b style="color:#22c55e;">${datos.puntosTotales || 0} Pts</b></span>`;
         }
     });
 }
 
-// --- 2. LOGICA DE EMPAREJAMIENTO PÚBLICO ---
+// --- 2. LOGICA DE EMPAREJAMIENTO PÚBLICO (CORREGIDA) ---
 document.getElementById('btn-buscar-publica').addEventListener('click', async () => {
     lobbyOptions.classList.add('hidden');
     matchmakingStatus.classList.remove('hidden');
@@ -118,8 +110,10 @@ document.getElementById('btn-buscar-publica').addEventListener('click', async ()
                 idPartidaActiva = docSnap.id;
                 salaEncontrada = true;
                 
+                // Al unirse el rival, cambiamos el estado a "esperando" para romper el bucle de carga en ambas pantallas
                 await updateDoc(doc(db, "partidas", idPartidaActiva), {
-                    jugadores: arrayUnion(miNombre)
+                    jugadores: arrayUnion(miNombre),
+                    estado: "esperando"
                 });
                 conectarAlJuego(idPartidaActiva);
                 break;
@@ -204,7 +198,6 @@ document.getElementById('btn-confirmar-unirse-privada').addEventListener('click'
     }
 });
 
-// --- CANCELAR EL BUSCADOR ONLINE ---
 document.getElementById('btn-cancelar-busqueda').addEventListener('click', async () => {
     if(idPartidaActiva) {
         if(desescribirListener) desescribirListener();
@@ -216,7 +209,7 @@ document.getElementById('btn-cancelar-busqueda').addEventListener('click', async
     if(auth.currentUser) conectarMisPuntosPermanentes(auth.currentUser.uid);
 });
 
-// --- 5. ESCUCHA ACTIVA DE LA PARTIDA (CON LOGICA DE REVANCHA INTEGRADA) ---
+// --- 5. ESCUCHA ACTIVA DE LA PARTIDA ---
 function conectarAlJuego(idSala) {
     const salaRef = doc(db, "partidas", idSala);
     if(desescribirListener) desescribirListener();
@@ -261,11 +254,8 @@ function conectarAlJuego(idSala) {
             
             renderizarTablaYMarcadores(datos.respuestas, datos.letra, datos.jugadores);
 
-            // --- LÓGICA CORREGIDA DE CONTROL DE BOTONES Y LETREROS DE REVANCHA ---
             const votos = datos.votosRevancha || {};
             const miVoto = votos[miNombre];
-            
-            // Evaluamos si algún otro jugador que no sea yo ya presionó el botón de revancha
             const otrosVotosSi = Object.keys(votos).filter(p => p !== miNombre && votos[p] === "si");
 
             if (datos.estadoRevancha === "procesando") {
@@ -297,17 +287,15 @@ function conectarAlJuego(idSala) {
     });
 }
 
-// --- 6. RENDER DE TABLAS Y MARCADORES EN TIEMPO REAL ---
+// --- 6. RENDER DE TABLAS Y MARCADORES (MODIFICADO SOLO PARA TUS PUNTOS) ---
 async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadores) {
-    const qUsuarios = query(collection(db, "usuarios"), where("nombre", "in", listaJugadores));
-    const snapUsuarios = await getDocs(qUsuarios);
-    
-    let stringMarcador = "";
-    snapUsuarios.forEach(docSnap => {
-        const u = docSnap.data();
-        stringMarcador += `<span>${u.nombre}: <b style="color:#22c55e;">${u.puntosTotales || 0} Pts</b></span> `;
-    });
-    marcadorSuperior.innerHTML = stringMarcador;
+    // Mantiene en pantalla superior únicamente tus puntos actualizados, ocultando los del rival
+    if (auth.currentUser) {
+        const userDoc = await getDoc(doc(db, "usuarios", auth.currentUser.uid));
+        if (userDoc.exists()) {
+            marcadorSuperior.innerHTML = `<span>Tu Record Histórico: <b style="color:#22c55e;">${userDoc.data().puntosTotales || 0} Pts</b></span>`;
+        }
+    }
 
     const tbody = document.getElementById('results-body');
     tbody.innerHTML = "";
@@ -317,7 +305,6 @@ async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadore
     if (letraActiva !== ultimaLetraProcesada && Object.keys(respuestas).length >= listaJugadores.length) {
         ultimaLetraProcesada = letraActiva;
         
-        // Sumamos los puntos ganados de esta ronda directo a la nube
         for (let jugador of Object.keys(tablaPuntosRonda)) {
             const puntosGanados = tablaPuntosRonda[jugador] || 0;
             if(puntosGanados > 0) {
@@ -335,6 +322,7 @@ async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadore
     Object.keys(respuestas).forEach(jugador => {
         const r = respuestas[jugador];
         const tr = document.createElement('tr');
+        // Se añade la columna de Animal en la vista de resultados
         tr.innerHTML = `
             <td><strong>${jugador}</strong></td>
             <td>${r.nombre}</td>
@@ -342,6 +330,7 @@ async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadore
             <td>${r.ciudad}</td>
             <td>${r.fruta}</td>
             <td>${r.color}</td>
+            <td>${r.animal || '-'}</td>
             <td style="color: #22c55e; font-weight: bold;">${tablaPuntosRonda[jugador] || 0} pts</td>
         `;
         tbody.appendChild(tr);
@@ -359,7 +348,7 @@ function irAlInicio() {
     if(auth.currentUser) conectarMisPuntosPermanentes(auth.currentUser.uid);
 }
 
-// --- 7. INICIAR RONDA / MANDAR LETRA ALEATORIA ---
+// --- 7. INICIAR RONDA ---
 document.getElementById('btn-iniciar-juego').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     iniciarSiguienteRonda();
@@ -379,7 +368,7 @@ async function iniciarSiguienteRonda() {
     });
 }
 
-// --- 8. CAPTURA Y ENVÍO DE RESPUESTAS (¡STOP!) ---
+// --- 8. ENVÍO DE RESPUESTAS INCLUYENDO ANIMAL ---
 document.getElementById('btn-stop').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     const misRespuestas = {
@@ -387,7 +376,8 @@ document.getElementById('btn-stop').addEventListener('click', async () => {
         apellido: document.getElementById('ans-apellido').value.trim().toLowerCase() || '-',
         ciudad: document.getElementById('ans-ciudad').value.trim().toLowerCase() || '-',
         fruta: document.getElementById('ans-fruta').value.trim().toLowerCase() || '-',
-        color: document.getElementById('ans-color').value.trim().toLowerCase() || '-'
+        color: document.getElementById('ans-color').value.trim().toLowerCase() || '-',
+        animal: document.getElementById('ans-animal').value.trim().toLowerCase() || '-'
     };
 
     await updateDoc(doc(db, "partidas", idPartidaActiva), {
@@ -404,17 +394,19 @@ async function enviarRespuestasTardias(respuestasActuales, salaRef) {
             apellido: document.getElementById('ans-apellido').value.trim().toLowerCase() || '-',
             ciudad: document.getElementById('ans-ciudad').value.trim().toLowerCase() || '-',
             fruta: document.getElementById('ans-fruta').value.trim().toLowerCase() || '-',
-            color: document.getElementById('ans-color').value.trim().toLowerCase() || '-'
+            color: document.getElementById('ans-color').value.trim().toLowerCase() || '-',
+            animal: document.getElementById('ans-animal').value.trim().toLowerCase() || '-'
         };
         await updateDoc(salaRef, { [`respuestas.${miNombre}`]: misRespuestas });
     }
 }
 
-// --- 9. MOTOR DE CÁLCULO DE PUNTOS ---
+// --- 9. MOTOR DE CÁLCULO CON LA CATEGORÍA ANIMAL INCLUIDA ---
 function calcularPuntosRonda(respuestas, letraActiva) {
     const jugadores = Object.keys(respuestas);
     const puntajes = {};
-    const categorias = ['nombre', 'apellido', 'ciudad', 'fruta', 'color'];
+    // Añadido 'animal' a la lista de validación de texto
+    const categorias = ['nombre', 'apellido', 'ciudad', 'fruta', 'color', 'animal'];
 
     jugadores.forEach(j => puntajes[j] = 0);
 
@@ -440,7 +432,7 @@ function calcularPuntosRonda(respuestas, letraActiva) {
     return puntajes;
 }
 
-// --- 10. VOTACIÓN Y REINICIOS LIMPIOS DE REVANCHAS ---
+// --- 10. REINICIOS LIMPIOS DE REVANCHAS ---
 document.getElementById('btn-volver-lobby').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     
@@ -454,7 +446,6 @@ document.getElementById('btn-revancha-si').addEventListener('click', async () =>
     if(!idPartidaActiva) return;
     document.getElementById('stop-form').reset();
     
-    // El jugador que acepta limpia completamente la estructura en Firebase para arrancar de cero
     await updateDoc(doc(db, "partidas", idPartidaActiva), {
         estado: "esperando",
         estadoRevancha: "",
