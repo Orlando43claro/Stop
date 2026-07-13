@@ -11,6 +11,7 @@ const auth = getAuth();
 let miNombre = "";
 let idPartidaActiva = null;
 let desescribirListener = null;
+let ultimaLetraProcesada = "";
 
 // Elementos DOM
 const loginBox = document.getElementById('login-box');
@@ -30,10 +31,10 @@ const revanchaBotones = document.getElementById('revancha-botones');
 const btnVolverLobby = document.getElementById('btn-volver-lobby');
 const marcadorSuperior = document.getElementById('marcador-superior');
 
-// --- 1. OBSERVADOR DE SESIÓN COMPLETO EN FIREBASE (Cero LocalStorage) ---
+// --- 1. OBSERVADOR DE SESIÓN EN FIREBASE ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        // El usuario está autenticado en Firebase, buscamos su Apodo guardado en Firestore
+        // Buscamos su Apodo guardado en Firestore usando su UID único
         const userDoc = await getDoc(doc(db, "usuarios", user.uid));
         if (userDoc.exists()) {
             miNombre = userDoc.data().nombre;
@@ -43,7 +44,7 @@ onAuthStateChanged(auth, async (user) => {
             conectarMisPuntosPermanentes(user.uid);
         }
     } else {
-        // No hay sesión activa en Firebase, mostramos pantalla de login obligatoria
+        // No hay sesión activa, login obligatorio
         miNombre = "";
         document.getElementById('user-badge').textContent = "Inicia sesión";
         marcadorSuperior.innerHTML = "";
@@ -64,13 +65,13 @@ document.getElementById('btn-ingresar-auth').addEventListener('click', async () 
         // Intentar iniciar sesión primero
         await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-        // Si el usuario no existe, lo registramos automáticamente en Firebase Auth
+        // Si el usuario no existe, lo registramos automáticamente
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
             if(!apodoInput) return alert("Tu cuenta no existe. Por favor introduce un Apodo para crearte una cuenta nueva.");
             
             try {
                 const credenciales = await createUserWithEmailAndPassword(auth, email, password);
-                // Guardamos el apodo y sus puntos iniciales vinculados a su ID de autenticación único
+                // Vinculamos su apodo y puntos iniciales en Firestore
                 await setDoc(doc(db, "usuarios", credenciales.user.uid), {
                     nombre: apodoInput,
                     puntosTotales: 0,
@@ -85,12 +86,12 @@ document.getElementById('btn-ingresar-auth').addEventListener('click', async () 
     }
 });
 
-// Botón de Cerrar Sesión total
+// Botón de Cerrar Sesión
 document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
     signOut(auth);
 });
 
-// Escucha en tiempo real de mis puntos en la nube
+// Escucha en tiempo real de mis puntos en la nube (Cuando estoy fuera de partida)
 function conectarMisPuntosPermanentes(uid) {
     onSnapshot(doc(db, "usuarios", uid), (docSnap) => {
         if(docSnap.exists() && !idPartidaActiva) {
@@ -215,7 +216,7 @@ document.getElementById('btn-cancelar-busqueda').addEventListener('click', async
     if(auth.currentUser) conectarMisPuntosPermanentes(auth.currentUser.uid);
 });
 
-// --- 5. ESCUCHA ACTIVA DE LA PARTIDA ---
+// --- 5. ESCUCHA ACTIVA DE LA PARTIDA (CON LOGICA DE REVANCHA INTEGRADA) ---
 function conectarAlJuego(idSala) {
     const salaRef = doc(db, "partidas", idSala);
     if(desescribirListener) desescribirListener();
@@ -260,23 +261,25 @@ function conectarAlJuego(idSala) {
             
             renderizarTablaYMarcadores(datos.respuestas, datos.letra, datos.jugadores);
 
+            // --- LÓGICA CORREGIDA DE CONTROL DE BOTONES Y LETREROS DE REVANCHA ---
             const votos = datos.votosRevancha || {};
-            const misRivales = datos.jugadores.filter(p => p !== miNombre);
-            const rivalDirecto = misRivales[0] || "Rival"; 
-            
             const miVoto = votos[miNombre];
-            const votoRival = votos[rivalDirecto];
+            
+            // Evaluamos si algún otro jugador que no sea yo ya presionó el botón de revancha
+            const otrosVotosSi = Object.keys(votos).filter(p => p !== miNombre && votos[p] === "si");
 
             if (datos.estadoRevancha === "procesando") {
                 btnVolverLobby.classList.add('hidden');
                 revanchaBox.classList.remove('hidden');
 
-                if (miVoto === "si" && !votoRival) {
+                if (miVoto === "si") {
                     revanchaTexto.textContent = "Esperando respuesta de tu rival...";
                     revanchaBotones.classList.add('hidden');
-                } 
-                else if (!miVoto && votoRival === "si") {
-                    revanchaTexto.textContent = `¡${rivalDirecto} te pide revancha! ¿Aceptas?`;
+                } else if (otrosVotosSi.length > 0) {
+                    revanchaTexto.textContent = `¡Te han pedido una revancha! ¿Aceptas?`;
+                    revanchaBotones.classList.remove('hidden');
+                } else {
+                    revanchaTexto.textContent = "¿Quieres una revancha con este grupo?";
                     revanchaBotones.classList.remove('hidden');
                 }
             } else {
@@ -286,7 +289,7 @@ function conectarAlJuego(idSala) {
             
             if (datos.estadoRevancha === "rechazada") {
                 if (miVoto === "si") {
-                    alert("Tu rival dijo: No gracias o ahora no.");
+                    alert("La revancha fue cancelada o rechazada.");
                 }
                 irAlInicio();
             }
@@ -294,7 +297,7 @@ function conectarAlJuego(idSala) {
     });
 }
 
-// Marcador superior cruzando IDs permanentes mediante querys seguras de Firestore
+// --- 6. RENDER DE TABLAS Y MARCADORES EN TIEMPO REAL ---
 async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadores) {
     const qUsuarios = query(collection(db, "usuarios"), where("nombre", "in", listaJugadores));
     const snapUsuarios = await getDocs(qUsuarios);
@@ -311,10 +314,10 @@ async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadore
     
     const tablaPuntosRonda = calcularPuntosRonda(respuestas, letraActiva);
 
-    if (letraActiva !== ultimaLetraProcesada && Object.keys(respuestas).length >= 2) {
+    if (letraActiva !== ultimaLetraProcesada && Object.keys(respuestas).length >= listaJugadores.length) {
         ultimaLetraProcesada = letraActiva;
         
-        // Buscamos los documentos por el apodo exacto de cada jugador en la ronda y sumamos
+        // Sumamos los puntos ganados de esta ronda directo a la nube
         for (let jugador of Object.keys(tablaPuntosRonda)) {
             const puntosGanados = tablaPuntosRonda[jugador] || 0;
             if(puntosGanados > 0) {
@@ -356,7 +359,7 @@ function irAlInicio() {
     if(auth.currentUser) conectarMisPuntosPermanentes(auth.currentUser.uid);
 }
 
-// --- 6. INICIAR RONDA / MANDAR LETRA ---
+// --- 7. INICIAR RONDA / MANDAR LETRA ALEATORIA ---
 document.getElementById('btn-iniciar-juego').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     iniciarSiguienteRonda();
@@ -376,7 +379,7 @@ async function iniciarSiguienteRonda() {
     });
 }
 
-// --- 7. PRESIONAR ¡STOP! ---
+// --- 8. CAPTURA Y ENVÍO DE RESPUESTAS (¡STOP!) ---
 document.getElementById('btn-stop').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     const misRespuestas = {
@@ -407,7 +410,7 @@ async function enviarRespuestasTardias(respuestasActuales, salaRef) {
     }
 }
 
-// --- 8. MOTOR DE CÁLCULO DE PUNTOS DE LA RONDA ---
+// --- 9. MOTOR DE CÁLCULO DE PUNTOS ---
 function calcularPuntosRonda(respuestas, letraActiva) {
     const jugadores = Object.keys(respuestas);
     const puntajes = {};
@@ -437,9 +440,7 @@ function calcularPuntosRonda(respuestas, letraActiva) {
     return puntajes;
 }
 
-let ultimaLetraProcesada = "";
-
-// --- 9. VOTACIÓN SEGURA DE REVANCHAS ---
+// --- 10. VOTACIÓN Y REINICIOS LIMPIOS DE REVANCHAS ---
 document.getElementById('btn-volver-lobby').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     
@@ -453,11 +454,14 @@ document.getElementById('btn-revancha-si').addEventListener('click', async () =>
     if(!idPartidaActiva) return;
     document.getElementById('stop-form').reset();
     
+    // El jugador que acepta limpia completamente la estructura en Firebase para arrancar de cero
     await updateDoc(doc(db, "partidas", idPartidaActiva), {
         estado: "esperando",
         estadoRevancha: "",
         votosRevancha: {},
-        respuestas: {}
+        respuestas: {},
+        quienPusoStop: "",
+        letra: ""
     });
 });
 
