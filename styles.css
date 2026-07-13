@@ -1,0 +1,164 @@
+:root {
+    --primary: #4f46e5;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text: #f8fafc;
+}
+
+* { 
+    box-sizing: border-box; 
+    margin: 0; 
+    padding: 0; 
+    font-family: 'Segoe UI', system-ui, sans-serif; 
+}
+
+body { 
+    background-color: var(--bg); 
+    color: var(--text); 
+    padding: 15px; 
+}
+
+.container { 
+    max-width: 600px; 
+    margin: 10px auto; 
+}
+
+.card { 
+    background: var(--card); 
+    padding: 22px; 
+    border-radius: 12px; 
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4); 
+    margin-bottom: 20px; 
+}
+
+.hidden { 
+    display: none !important; 
+}
+
+.game-header { 
+    text-align: center; 
+    padding: 10px 0; 
+}
+
+.badge { 
+    font-weight: bold; 
+    color: var(--success); 
+    margin-top: 5px; 
+    font-size: 14px;
+}
+
+.form-group { 
+    display: flex; 
+    flex-direction: column; 
+    margin-bottom: 14px; 
+}
+
+.form-group label { 
+    margin-bottom: 5px; 
+    font-weight: bold; 
+    color: #94a3b8; 
+    font-size: 14px;
+}
+
+.form-group input { 
+    padding: 12px; 
+    border-radius: 8px; 
+    border: 1px solid #334155; 
+    background: #0f172a; 
+    color: white; 
+    font-size: 16px; 
+    outline: none;
+}
+
+.form-group input:focus {
+    border-color: var(--primary);
+}
+
+.btn { 
+    padding: 14px; 
+    border: none; 
+    border-radius: 8px; 
+    font-size: 16px; 
+    font-weight: bold; 
+    cursor: pointer; 
+    color: white; 
+    background: var(--primary); 
+    width: 100%; 
+    transition: background 0.2s; 
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn-danger { 
+    background: var(--danger); 
+    font-size: 22px; 
+    margin-top: 15px; 
+    padding: 16px;
+}
+
+.btn-start { 
+    background: var(--success); 
+    margin-top: 15px; 
+}
+
+.letra-box { 
+    text-align: center; 
+    font-size: 20px; 
+    font-weight: bold; 
+}
+
+#active-letter { 
+    font-size: 55px; 
+    color: #f59e0b; 
+    display: block; 
+    margin-top: 5px;
+}
+
+.loading {
+    color: #94a3b8;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+#stop-announcer {
+    color: #f59e0b;
+    font-weight: bold;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+/* Tabla Responsiva para Celulares */
+.table-responsive { 
+    width: 100%; 
+    overflow-x: auto; 
+    margin-top: 15px; 
+    border-radius: 8px; 
+    border: 1px solid #334155;
+}
+
+table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    background: #0f172a; 
+    min-width: 550px; 
+}
+
+th, td { 
+    padding: 12px 10px; 
+    text-align: left; 
+    border-bottom: 1px solid #334155; 
+    font-size: 14px; 
+}
+
+th { 
+    background: #1e293b; 
+    color: #cbd5e1;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
