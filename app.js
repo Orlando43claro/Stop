@@ -1,6 +1,6 @@
 import { db } from "./firebase-config.js";
 import { 
-    collection, doc, addDoc, getDocs, updateDoc, onSnapshot, query, where, arrayUnion, getDoc 
+    collection, doc, addDoc, getDocs, updateDoc, onSnapshot, query, where, arrayUnion 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 let miNombre = "";
@@ -19,6 +19,10 @@ const screenLobby = document.getElementById('screen-lobby');
 const screenGame = document.getElementById('screen-game');
 const screenResults = document.getElementById('screen-results');
 
+const revanchaBox = document.getElementById('revancha-box');
+const revanchaTexto = document.getElementById('revancha-texto');
+const btnVolverLobby = document.getElementById('btn-volver-lobby');
+
 // --- 1. CONFIGURACIÓN DE NOMBRE ---
 document.getElementById('btn-guardar-nombre').addEventListener('click', () => {
     const input = document.getElementById('username').value.trim();
@@ -29,13 +33,12 @@ document.getElementById('btn-guardar-nombre').addEventListener('click', () => {
     document.getElementById('user-badge').textContent = `Jugador: ${miNombre}`;
 });
 
-// --- 2. LOGICA DE EMPAREJAMIENTO PÚBLICO MEJORADA ---
+// --- 2. LOGICA DE EMPAREJAMIENTO PÚBLICO ---
 document.getElementById('btn-buscar-publica').addEventListener('click', async () => {
     lobbyOptions.classList.add('hidden');
     matchmakingStatus.classList.remove('hidden');
     
     try {
-        // Buscamos salas que estén esperando un rival
         const q = query(collection(db, "partidas"), where("tipo", "==", "publica"), where("estado", "==", "buscando"));
         const querySnapshot = await getDocs(q);
         
@@ -43,14 +46,13 @@ document.getElementById('btn-buscar-publica').addEventListener('click', async ()
 
         for (let docSnap of querySnapshot.docs) {
             const data = docSnap.data();
-            // Evitamos unirnos a nuestra propia sala si se quedó colgada
             if (data.jugadores && !data.jugadores.includes(miNombre)) {
                 idPartidaActiva = docSnap.id;
                 salaEncontrada = true;
                 
                 await updateDoc(doc(db, "partidas", idPartidaActiva), {
                     jugadores: arrayUnion(miNombre),
-                    estado: "esperando" // Cambia el estado para que ambos entren al lobby
+                    estado: "esperando"
                 });
                 conectarAlJuego(idPartidaActiva);
                 break;
@@ -58,7 +60,6 @@ document.getElementById('btn-buscar-publica').addEventListener('click', async ()
         }
 
         if (!salaEncontrada) {
-            // Si no hay ninguna libre, creamos la nuestra
             const nuevaPartida = await addDoc(collection(db, "partidas"), {
                 tipo: "publica",
                 pin: "",
@@ -66,7 +67,9 @@ document.getElementById('btn-buscar-publica').addEventListener('click', async ()
                 jugadores: [miNombre],
                 letra: "",
                 quienPusoStop: "",
-                respuestas: {}
+                respuestas: {},
+                retadorRevancha: "",
+                estadoRevancha: ""
             });
             idPartidaActiva = nuevaPartida.id;
             conectarAlJuego(idPartidaActiva);
@@ -97,7 +100,9 @@ document.getElementById('btn-confirmar-crear-privada').addEventListener('click',
         jugadores: [miNombre],
         letra: "",
         quienPusoStop: "",
-        respuestas: {}
+        respuestas: {},
+        retadorRevancha: "",
+        estadoRevancha: ""
     });
     idPartidaActiva = nuevaPartidaPrivada.id;
     conectarAlJuego(idPartidaActiva);
@@ -152,11 +157,14 @@ function conectarAlJuego(idSala) {
         const datos = snapshot.data();
 
         if (datos.estado === "buscando") {
-            matchmakingStatus.getAnimations;
             matchmakingStatus.classList.remove('hidden');
             lobbyWaiting.classList.add('hidden');
         } 
         else if (datos.estado === "esperando") {
+            screenLobby.classList.remove('hidden');
+            screenGame.classList.add('hidden');
+            screenResults.classList.add('hidden');
+            
             matchmakingStatus.classList.add('hidden');
             lobbyWaiting.classList.remove('hidden');
             
@@ -165,6 +173,10 @@ function conectarAlJuego(idSala) {
             
             const divPlayers = document.getElementById('players-list');
             divPlayers.innerHTML = datos.jugadores.map(p => `<p>• <b>${p}</b> ${p === miNombre ? '(Tú)' : ''}</p>`).join('');
+            
+            // Limpieza de cajas de revancha al reiniciar
+            revanchaBox.classList.add('hidden');
+            btnVolverLobby.classList.remove('hidden');
         } 
         else if (datos.estado === "jugando") {
             screenLobby.classList.add('hidden');
@@ -180,13 +192,47 @@ function conectarAlJuego(idSala) {
             enviarRespuestasTardias(datos.respuestas, salaRef);
             document.getElementById('stop-announcer').textContent = `¡Ronda finalizada por: ${datos.quienPusoStop}!`;
             renderizarTabla(datos.respuestas, datos.letra);
+
+            // MANEJO E INTEGRACIÓN DE LA REVANCHA EN TIEMPO REAL
+            if (datos.estadoRevancha === "solicitada") {
+                revanchaBox.classList.remove('hidden');
+                if (datos.retadorRevancha === miNombre) {
+                    revanchaTexto.textContent = "Esperando respuesta de tu rival...";
+                    document.getElementById('btn-revancha-si').classList.add('hidden');
+                    document.getElementById('btn-revancha-no').classList.add('hidden');
+                } else {
+                    revanchaTexto.textContent = `¡${datos.retadorRevancha} te pide revancha! ¿Aceptas?`;
+                    document.getElementById('btn-revancha-si').classList.remove('hidden');
+                    document.getElementById('btn-revancha-no').classList.remove('hidden');
+                }
+            } 
+            else if (datos.estadoRevancha === "rechazada") {
+                if (datos.retadorRevancha === miNombre) {
+                    alert("Tu rival dijo: No gracias o ahora no.");
+                }
+                irAlInicio();
+            }
         }
     });
+}
+
+function irAlInicio() {
+    if(desescribirListener) desescribirListener();
+    idPartidaActiva = null;
+    revanchaBox.classList.add('hidden');
+    screenResults.classList.add('hidden');
+    screenLobby.classList.remove('hidden');
+    lobbyOptions.classList.remove('hidden');
+    lobbyWaiting.classList.add('hidden');
 }
 
 // --- 6. INICIAR RONDA / MANDAR LETRA ---
 document.getElementById('btn-iniciar-juego').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
+    iniciarSiguienteRonda();
+});
+
+async function iniciarSiguienteRonda() {
     const letras = "ABCDEFGHIJLMNOPRSTUV";
     const letraAleatoria = letras[Math.floor(Math.random() * letras.length)];
     
@@ -194,9 +240,11 @@ document.getElementById('btn-iniciar-juego').addEventListener('click', async () 
         estado: "jugando",
         letra: letraAleatoria,
         quienPusoStop: "",
-        respuestas: {}
+        respuestas: {},
+        retadorRevancha: "",
+        estadoRevancha: ""
     });
-});
+}
 
 // --- 7. PRESIONAR ¡STOP! ---
 document.getElementById('btn-stop').addEventListener('click', async () => {
@@ -229,34 +277,29 @@ async function enviarRespuestasTardias(respuestasActuales, salaRef) {
     }
 }
 
-// --- 8. MOTOR DE CÁLCULO DE PUNTOS AUTOMÁTICO ---
+// --- 8. MOTOR DE CÁLCULO DE PUNTOS ---
 function calcularPuntos(respuestas, letraActiva) {
     const jugadores = Object.keys(respuestas);
     const puntajes = {};
     const categorias = ['nombre', 'apellido', 'ciudad', 'fruta', 'color'];
 
-    // Inicializar puntajes en cero
     jugadores.forEach(j => puntajes[j] = 0);
 
     categorias.forEach(cat => {
         const registroPalabras = [];
-
-        // Recolectar palabras válidas de la categoría
         jugadores.forEach(j => {
             const palabra = respuestas[j][cat] ? respuestas[j][cat].trim().toLowerCase() : '-';
-            // Valida que empiece con la letra correcta y no sea un guion
             if (palabra !== '-' && palabra.startsWith(letraActiva.toLowerCase())) {
                 registroPalabras.push({ jugador: j, palabra: palabra });
             }
         });
 
-        // Evaluar repetición
         registroPalabras.forEach(item => {
             const repetida = registroPalabras.filter(p => p.palabra === item.palabra).length > 1;
             if (repetida) {
-                puntajes[item.jugador] += 50; // Palabra repetida
+                puntajes[item.jugador] += 50;
             } else {
-                puntajes[item.jugador] += 100; // Palabra única válida
+                puntajes[item.jugador] += 100;
             }
         });
     });
@@ -268,14 +311,11 @@ function renderizarTabla(respuestas, letraActiva) {
     const tbody = document.getElementById('results-body');
     tbody.innerHTML = "";
     
-    // Calculamos los puntajes antes de pintar la tabla
     const tablaPuntos = calcularPuntos(respuestas, letraActiva);
 
     Object.keys(respuestas).forEach(jugador => {
         const r = respuestas[jugador];
         const tr = document.createElement('tr');
-        
-        // Si el jugador actual es el ganador del mayor puntaje, le añadimos un estilo especial
         tr.innerHTML = `
             <td><strong>${jugador}</strong></td>
             <td>${r.nombre}</td>
@@ -289,9 +329,36 @@ function renderizarTabla(respuestas, letraActiva) {
     });
 }
 
-// --- 9. REINICIAR PARTIDA ACTUAL ---
+// --- 9. BOTONES DE CONTROL DE REVANCHA ---
+
+// Al darle "Nueva ronda" propone la revancha a la base de datos
 document.getElementById('btn-volver-lobby').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
+    btnVolverLobby.classList.add('hidden'); // Oculta el botón principal para evitar clics duplicados
+    await updateDoc(doc(db, "partidas", idPartidaActiva), {
+        estadoRevancha: "solicitada",
+        retadorRevancha: miNombre
+    });
+});
+
+// El rival acepta la revancha
+document.getElementById('btn-revancha-si').addEventListener('click', async () => {
+    if(!idPartidaActiva) return;
     document.getElementById('stop-form').reset();
-    await updateDoc(doc(db, "partidas", idPartidaActiva), { estado: "esperando" });
+    // Reinicia la sala mandando a todos de vuelta al lobby esperando la nueva letra
+    await updateDoc(doc(db, "partidas", idPartidaActiva), {
+        estado: "esperando",
+        estadoRevancha: "",
+        retadorRevancha: "",
+        respuestas: {}
+    });
+});
+
+// El rival rechaza la revancha
+document.getElementById('btn-revancha-no').addEventListener('click', async () => {
+    if(!idPartidaActiva) return;
+    await updateDoc(doc(db, "partidas", idPartidaActiva), {
+        estadoRevancha: "rechazada"
+    });
+    irAlInicio();
 });
