@@ -6,6 +6,7 @@ import {
 let miNombre = "";
 let idPartidaActiva = null;
 let desescribirListener = null;
+let puntosGlobales = {}; // Guarda el historial de las rondas
 
 // Elementos DOM
 const loginBox = document.getElementById('login-box');
@@ -21,7 +22,9 @@ const screenResults = document.getElementById('screen-results');
 
 const revanchaBox = document.getElementById('revancha-box');
 const revanchaTexto = document.getElementById('revancha-texto');
+const revanchaBotones = document.getElementById('revancha-botones');
 const btnVolverLobby = document.getElementById('btn-volver-lobby');
+const marcadorSuperior = document.getElementById('marcador-superior');
 
 // --- 1. CONFIGURACIÓN DE NOMBRE ---
 document.getElementById('btn-guardar-nombre').addEventListener('click', () => {
@@ -37,6 +40,7 @@ document.getElementById('btn-guardar-nombre').addEventListener('click', () => {
 document.getElementById('btn-buscar-publica').addEventListener('click', async () => {
     lobbyOptions.classList.add('hidden');
     matchmakingStatus.classList.remove('hidden');
+    puntosGlobales = {}; 
     
     try {
         const q = query(collection(db, "partidas"), where("tipo", "==", "publica"), where("estado", "==", "buscando"));
@@ -68,7 +72,7 @@ document.getElementById('btn-buscar-publica').addEventListener('click', async ()
                 letra: "",
                 quienPusoStop: "",
                 respuestas: {},
-                retadorRevancha: "",
+                votosRevancha: {},
                 estadoRevancha: ""
             });
             idPartidaActiva = nuevaPartida.id;
@@ -92,6 +96,7 @@ document.getElementById('btn-confirmar-crear-privada').addEventListener('click',
     
     lobbyOptions.classList.add('hidden');
     pinCreationBox.classList.add('hidden');
+    puntosGlobales = {};
 
     const nuevaPartidaPrivada = await addDoc(collection(db, "partidas"), {
         tipo: "privada",
@@ -101,7 +106,7 @@ document.getElementById('btn-confirmar-crear-privada').addEventListener('click',
         letra: "",
         quienPusoStop: "",
         respuestas: {},
-        retadorRevancha: "",
+        votosRevancha: {},
         estadoRevancha: ""
     });
     idPartidaActiva = nuevaPartidaPrivada.id;
@@ -117,6 +122,7 @@ document.getElementById('btn-abrir-unirse-privada').addEventListener('click', ()
 document.getElementById('btn-confirmar-unirse-privada').addEventListener('click', async () => {
     const pin = document.getElementById('join-pin').value;
     if (pin.length !== 4) return alert("Ingresa el código PIN de 4 números");
+    puntosGlobales = {};
 
     const q = query(collection(db, "partidas"), where("tipo", "==", "privada"), where("pin", "==", pin), where("estado", "==", "esperando"));
     const querySnapshot = await getDocs(q);
@@ -156,6 +162,12 @@ function conectarAlJuego(idSala) {
         if (!snapshot.exists()) return;
         const datos = snapshot.data();
 
+        // Actualizar nombres del marcador superior
+        if(datos.jugadores) {
+            datos.jugadores.forEach(j => { if(!puntosGlobales[j]) puntosGlobales[j] = 0; });
+            actualizarMarcadorSuperior();
+        }
+
         if (datos.estado === "buscando") {
             matchmakingStatus.classList.remove('hidden');
             lobbyWaiting.classList.add('hidden');
@@ -164,7 +176,6 @@ function conectarAlJuego(idSala) {
             screenLobby.classList.remove('hidden');
             screenGame.classList.add('hidden');
             screenResults.classList.add('hidden');
-            
             matchmakingStatus.classList.add('hidden');
             lobbyWaiting.classList.remove('hidden');
             
@@ -174,7 +185,7 @@ function conectarAlJuego(idSala) {
             const divPlayers = document.getElementById('players-list');
             divPlayers.innerHTML = datos.jugadores.map(p => `<p>• <b>${p}</b> ${p === miNombre ? '(Tú)' : ''}</p>`).join('');
             
-            // Limpieza de cajas de revancha al reiniciar
+            // Reajuste total de botones
             revanchaBox.classList.add('hidden');
             btnVolverLobby.classList.remove('hidden');
         } 
@@ -191,23 +202,32 @@ function conectarAlJuego(idSala) {
             
             enviarRespuestasTardias(datos.respuestas, salaRef);
             document.getElementById('stop-announcer').textContent = `¡Ronda finalizada por: ${datos.quienPusoStop}!`;
+            
+            // Renderiza la tabla y acumula puntos una única vez por ronda
             renderizarTabla(datos.respuestas, datos.letra);
 
-            // MANEJO E INTEGRACIÓN DE LA REVANCHA EN TIEMPO REAL
-            if (datos.estadoRevancha === "solicitada") {
+            // MANEJO SEGURO DE REVANCHA BASADO EN TU ENTORNO
+            const votos = datos.votosRevancha || {};
+            const misRivales = datos.jugadores.filter(p => p !== miNombre);
+            const miVoto = votos[miNombre];
+            const votoRival = votos[misRivales[0]]; // Tomamos el primer rival directo
+
+            if (datos.estadoRevancha === "procesando") {
+                btnVolverLobby.classList.add('hidden');
                 revanchaBox.classList.remove('hidden');
-                if (datos.retadorRevancha === miNombre) {
+
+                if (miVoto === "si" && !votoRival) {
                     revanchaTexto.textContent = "Esperando respuesta de tu rival...";
-                    document.getElementById('btn-revancha-si').classList.add('hidden');
-                    document.getElementById('btn-revancha-no').classList.add('hidden');
-                } else {
-                    revanchaTexto.textContent = `¡${datos.retadorRevancha} te pide revancha! ¿Aceptas?`;
-                    document.getElementById('btn-revancha-si').classList.remove('hidden');
-                    document.getElementById('btn-revancha-no').classList.remove('hidden');
+                    revanchaBotones.classList.add('hidden');
+                } 
+                else if (!miVoto && votoRival === "si") {
+                    revanchaTexto.textContent = `¡${misRivales[0]} pide revancha! ¿Aceptas?`;
+                    revanchaBotones.classList.remove('hidden');
                 }
-            } 
-            else if (datos.estadoRevancha === "rechazada") {
-                if (datos.retadorRevancha === miNombre) {
+            }
+            
+            if (datos.estadoRevancha === "rechazada") {
+                if (miVoto === "si") {
                     alert("Tu rival dijo: No gracias o ahora no.");
                 }
                 irAlInicio();
@@ -216,9 +236,17 @@ function conectarAlJuego(idSala) {
     });
 }
 
+function actualizarMarcadorSuperior() {
+    marcadorSuperior.innerHTML = Object.keys(puntosGlobales)
+        .map(j => `<span>${j}: <b style="color:#22c55e;">${puntosGlobales[j]} Pts</b></span>`)
+        .join(' <span style="color:#334155;">|</span> ');
+}
+
 function irAlInicio() {
     if(desescribirListener) desescribirListener();
     idPartidaActiva = null;
+    puntosGlobales = {};
+    marcadorSuperior.innerHTML = "";
     revanchaBox.classList.add('hidden');
     screenResults.classList.add('hidden');
     screenLobby.classList.remove('hidden');
@@ -241,7 +269,7 @@ async function iniciarSiguienteRonda() {
         letra: letraAleatoria,
         quienPusoStop: "",
         respuestas: {},
-        retadorRevancha: "",
+        votosRevancha: {},
         estadoRevancha: ""
     });
 }
@@ -278,7 +306,7 @@ async function enviarRespuestasTardias(respuestasActuales, salaRef) {
 }
 
 // --- 8. MOTOR DE CÁLCULO DE PUNTOS ---
-function calcularPuntos(respuestas, letraActiva) {
+function calcularPuntosRonda(respuestas, letraActiva) {
     const jugadores = Object.keys(respuestas);
     const puntajes = {};
     const categorias = ['nombre', 'apellido', 'ciudad', 'fruta', 'color'];
@@ -307,11 +335,23 @@ function calcularPuntos(respuestas, letraActiva) {
     return puntajes;
 }
 
+// Variable de control local para no sumar doble en la misma pantalla
+let ultimaLetraProcesada = "";
+
 function renderizarTabla(respuestas, letraActiva) {
     const tbody = document.getElementById('results-body');
     tbody.innerHTML = "";
     
-    const tablaPuntos = calcularPuntos(respuestas, letraActiva);
+    const tablaPuntosRonda = calcularPuntosRonda(respuestas, letraActiva);
+
+    // Sumar al marcador global solo si cambió la ronda
+    if (letraActiva !== ultimaLetraProcesada && Object.keys(respuestas).length >= 2) {
+        Object.keys(tablaPuntosRonda).forEach(j => {
+            puntosGlobales[j] = (puntosGlobales[j] || 0) + tablaPuntosRonda[j];
+        });
+        ultimaLetraProcesada = letraActiva;
+        actualizarMarcadorSuperior();
+    }
 
     Object.keys(respuestas).forEach(jugador => {
         const r = respuestas[jugador];
@@ -323,42 +363,45 @@ function renderizarTabla(respuestas, letraActiva) {
             <td>${r.ciudad}</td>
             <td>${r.fruta}</td>
             <td>${r.color}</td>
-            <td style="color: #22c55e; font-weight: bold;">${tablaPuntos[jugador] || 0} pts</td>
+            <td style="color: #22c55e; font-weight: bold;">${tablaPuntosRonda[jugador] || 0} pts</td>
         `;
         tbody.appendChild(tr);
     });
 }
 
-// --- 9. BOTONES DE CONTROL DE REVANCHA ---
+// --- 9. CONTROL DE VOTACIÓN DE REVANCHAS ---
 
-// Al darle "Nueva ronda" propone la revancha a la base de datos
+// Al dar clic en "Nueva Ronda", el jugador vota que "SÍ"
 document.getElementById('btn-volver-lobby').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
-    btnVolverLobby.classList.add('hidden'); // Oculta el botón principal para evitar clics duplicados
+    
     await updateDoc(doc(db, "partidas", idPartidaActiva), {
-        estadoRevancha: "solicitada",
-        retadorRevancha: miNombre
+        estadoRevancha: "procesando",
+        [`votosRevancha.${miNombre}`]: "si"
     });
 });
 
-// El rival acepta la revancha
+// Si el rival acepta dándole al botón "Sí, ¡Dale!"
 document.getElementById('btn-revancha-si').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     document.getElementById('stop-form').reset();
-    // Reinicia la sala mandando a todos de vuelta al lobby esperando la nueva letra
+    
+    // Al aceptar los dos, se reinicia el juego directamente
     await updateDoc(doc(db, "partidas", idPartidaActiva), {
         estado: "esperando",
         estadoRevancha: "",
-        retadorRevancha: "",
+        votosRevancha: {},
         respuestas: {}
     });
 });
 
-// El rival rechaza la revancha
+// Si le da al botón "No, salir"
 document.getElementById('btn-revancha-no').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
+    
     await updateDoc(doc(db, "partidas", idPartidaActiva), {
-        estadoRevancha: "rechazada"
+        estadoRevancha: "rechazada",
+        [`votosRevancha.${miNombre}`]: "no"
     });
     irAlInicio();
 });
