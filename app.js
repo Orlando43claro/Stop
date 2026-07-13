@@ -1,12 +1,16 @@
 import { db } from "./firebase-config.js";
+// Importamos módulos de Auth necesarios
 import { 
-    collection, doc, addDoc, getDocs, updateDoc, onSnapshot, query, where, arrayUnion 
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { 
+    collection, doc, addDoc, getDocs, getDoc, setDoc, updateDoc, onSnapshot, query, where, arrayUnion, increment 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+const auth = getAuth();
 let miNombre = "";
 let idPartidaActiva = null;
 let desescribirListener = null;
-let puntosGlobales = {}; // Guarda el historial de las rondas
 
 // Elementos DOM
 const loginBox = document.getElementById('login-box');
@@ -26,21 +30,80 @@ const revanchaBotones = document.getElementById('revancha-botones');
 const btnVolverLobby = document.getElementById('btn-volver-lobby');
 const marcadorSuperior = document.getElementById('marcador-superior');
 
-// --- 1. CONFIGURACIÓN DE NOMBRE ---
-document.getElementById('btn-guardar-nombre').addEventListener('click', () => {
-    const input = document.getElementById('username').value.trim();
-    if(!input) return alert("Por favor ingresa tu apodo");
-    miNombre = input;
-    loginBox.classList.add('hidden');
-    lobbyOptions.classList.remove('hidden');
-    document.getElementById('user-badge').textContent = `Jugador: ${miNombre}`;
+// --- 1. OBSERVADOR DE SESIÓN COMPLETO EN FIREBASE (Cero LocalStorage) ---
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        // El usuario está autenticado en Firebase, buscamos su Apodo guardado en Firestore
+        const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+        if (userDoc.exists()) {
+            miNombre = userDoc.data().nombre;
+            document.getElementById('user-badge').textContent = `Jugador: ${miNombre}`;
+            loginBox.classList.add('hidden');
+            lobbyOptions.classList.remove('hidden');
+            conectarMisPuntosPermanentes(user.uid);
+        }
+    } else {
+        // No hay sesión activa en Firebase, mostramos pantalla de login obligatoria
+        miNombre = "";
+        document.getElementById('user-badge').textContent = "Inicia sesión";
+        marcadorSuperior.innerHTML = "";
+        loginBox.classList.remove('hidden');
+        lobbyOptions.classList.add('hidden');
+    }
 });
+
+// Mecanismo unificado de Entrada / Registro Directo
+document.getElementById('btn-ingresar-auth').addEventListener('click', async () => {
+    const email = document.getElementById('user-email').value.trim();
+    const password = document.getElementById('user-password').value;
+    const apodoInput = document.getElementById('username').value.trim();
+
+    if(!email || !password) return alert("Ingresa tu correo y contraseña");
+
+    try {
+        // Intentar iniciar sesión primero
+        await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+        // Si el usuario no existe, lo registramos automáticamente en Firebase Auth
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+            if(!apodoInput) return alert("Tu cuenta no existe. Por favor introduce un Apodo para crearte una cuenta nueva.");
+            
+            try {
+                const credenciales = await createUserWithEmailAndPassword(auth, email, password);
+                // Guardamos el apodo y sus puntos iniciales vinculados a su ID de autenticación único
+                await setDoc(doc(db, "usuarios", credenciales.user.uid), {
+                    nombre: apodoInput,
+                    puntosTotales: 0,
+                    email: email
+                });
+            } catch (err) {
+                alert("Error al registrar cuenta: " + err.message);
+            }
+        } else {
+            alert("Error de ingreso: " + error.message);
+        }
+    }
+});
+
+// Botón de Cerrar Sesión total
+document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
+    signOut(auth);
+});
+
+// Escucha en tiempo real de mis puntos en la nube
+function conectarMisPuntosPermanentes(uid) {
+    onSnapshot(doc(db, "usuarios", uid), (docSnap) => {
+        if(docSnap.exists() && !idPartidaActiva) {
+            const datos = docSnap.data();
+            marcadorSuperior.innerHTML = `<span>Tu Record Histórico: <b style="color:#22c55e;">${datos.puntosTotales || 0} Pts</b></span>`;
+        }
+    });
+}
 
 // --- 2. LOGICA DE EMPAREJAMIENTO PÚBLICO ---
 document.getElementById('btn-buscar-publica').addEventListener('click', async () => {
     lobbyOptions.classList.add('hidden');
     matchmakingStatus.classList.remove('hidden');
-    puntosGlobales = {}; 
     
     try {
         const q = query(collection(db, "partidas"), where("tipo", "==", "publica"), where("estado", "==", "buscando"));
@@ -55,8 +118,7 @@ document.getElementById('btn-buscar-publica').addEventListener('click', async ()
                 salaEncontrada = true;
                 
                 await updateDoc(doc(db, "partidas", idPartidaActiva), {
-                    jugadores: arrayUnion(miNombre),
-                    estado: "esperando"
+                    jugadores: arrayUnion(miNombre)
                 });
                 conectarAlJuego(idPartidaActiva);
                 break;
@@ -96,7 +158,6 @@ document.getElementById('btn-confirmar-crear-privada').addEventListener('click',
     
     lobbyOptions.classList.add('hidden');
     pinCreationBox.classList.add('hidden');
-    puntosGlobales = {};
 
     const nuevaPartidaPrivada = await addDoc(collection(db, "partidas"), {
         tipo: "privada",
@@ -122,7 +183,6 @@ document.getElementById('btn-abrir-unirse-privada').addEventListener('click', ()
 document.getElementById('btn-confirmar-unirse-privada').addEventListener('click', async () => {
     const pin = document.getElementById('join-pin').value;
     if (pin.length !== 4) return alert("Ingresa el código PIN de 4 números");
-    puntosGlobales = {};
 
     const q = query(collection(db, "partidas"), where("tipo", "==", "privada"), where("pin", "==", pin), where("estado", "==", "esperando"));
     const querySnapshot = await getDocs(q);
@@ -132,7 +192,8 @@ document.getElementById('btn-confirmar-unirse-privada').addEventListener('click'
         idPartidaActiva = partidaDoc.id;
         
         await updateDoc(doc(db, "partidas", idPartidaActiva), {
-            jugadores: arrayUnion(miNombre)
+            jugadores: arrayUnion(miNombre),
+            estado: "esperando"
         });
         pinJoinBox.classList.add('hidden');
         lobbyOptions.classList.add('hidden');
@@ -151,22 +212,17 @@ document.getElementById('btn-cancelar-busqueda').addEventListener('click', async
     matchmakingStatus.classList.add('hidden');
     lobbyOptions.classList.remove('hidden');
     idPartidaActiva = null;
+    if(auth.currentUser) conectarMisPuntosPermanentes(auth.currentUser.uid);
 });
 
-// --- 5. ESCUCHA ACTIVA EN TIEMPO REAL ---
+// --- 5. ESCUCHA ACTIVA DE LA PARTIDA ---
 function conectarAlJuego(idSala) {
     const salaRef = doc(db, "partidas", idSala);
     if(desescribirListener) desescribirListener();
 
-    desescribirListener = onSnapshot(salaRef, (snapshot) => {
+    desescribirListener = onSnapshot(salaRef, async (snapshot) => {
         if (!snapshot.exists()) return;
         const datos = snapshot.data();
-
-        // Actualizar nombres del marcador superior
-        if(datos.jugadores) {
-            datos.jugadores.forEach(j => { if(!puntosGlobales[j]) puntosGlobales[j] = 0; });
-            actualizarMarcadorSuperior();
-        }
 
         if (datos.estado === "buscando") {
             matchmakingStatus.classList.remove('hidden');
@@ -185,7 +241,6 @@ function conectarAlJuego(idSala) {
             const divPlayers = document.getElementById('players-list');
             divPlayers.innerHTML = datos.jugadores.map(p => `<p>• <b>${p}</b> ${p === miNombre ? '(Tú)' : ''}</p>`).join('');
             
-            // Reajuste total de botones
             revanchaBox.classList.add('hidden');
             btnVolverLobby.classList.remove('hidden');
         } 
@@ -203,14 +258,14 @@ function conectarAlJuego(idSala) {
             enviarRespuestasTardias(datos.respuestas, salaRef);
             document.getElementById('stop-announcer').textContent = `¡Ronda finalizada por: ${datos.quienPusoStop}!`;
             
-            // Renderiza la tabla y acumula puntos una única vez por ronda
-            renderizarTabla(datos.respuestas, datos.letra);
+            renderizarTablaYMarcadores(datos.respuestas, datos.letra, datos.jugadores);
 
-            // MANEJO SEGURO DE REVANCHA BASADO EN TU ENTORNO
             const votos = datos.votosRevancha || {};
             const misRivales = datos.jugadores.filter(p => p !== miNombre);
+            const rivalDirecto = misRivales[0] || "Rival"; 
+            
             const miVoto = votos[miNombre];
-            const votoRival = votos[misRivales[0]]; // Tomamos el primer rival directo
+            const votoRival = votos[rivalDirecto];
 
             if (datos.estadoRevancha === "procesando") {
                 btnVolverLobby.classList.add('hidden');
@@ -221,9 +276,12 @@ function conectarAlJuego(idSala) {
                     revanchaBotones.classList.add('hidden');
                 } 
                 else if (!miVoto && votoRival === "si") {
-                    revanchaTexto.textContent = `¡${misRivales[0]} pide revancha! ¿Aceptas?`;
+                    revanchaTexto.textContent = `¡${rivalDirecto} te pide revancha! ¿Aceptas?`;
                     revanchaBotones.classList.remove('hidden');
                 }
+            } else {
+                btnVolverLobby.classList.remove('hidden');
+                revanchaBox.classList.add('hidden');
             }
             
             if (datos.estadoRevancha === "rechazada") {
@@ -236,22 +294,66 @@ function conectarAlJuego(idSala) {
     });
 }
 
-function actualizarMarcadorSuperior() {
-    marcadorSuperior.innerHTML = Object.keys(puntosGlobales)
-        .map(j => `<span>${j}: <b style="color:#22c55e;">${puntosGlobales[j]} Pts</b></span>`)
-        .join(' <span style="color:#334155;">|</span> ');
+// Marcador superior cruzando IDs permanentes mediante querys seguras de Firestore
+async function renderizarTablaYMarcadores(respuestas, letraActiva, listaJugadores) {
+    const qUsuarios = query(collection(db, "usuarios"), where("nombre", "in", listaJugadores));
+    const snapUsuarios = await getDocs(qUsuarios);
+    
+    let stringMarcador = "";
+    snapUsuarios.forEach(docSnap => {
+        const u = docSnap.data();
+        stringMarcador += `<span>${u.nombre}: <b style="color:#22c55e;">${u.puntosTotales || 0} Pts</b></span> `;
+    });
+    marcadorSuperior.innerHTML = stringMarcador;
+
+    const tbody = document.getElementById('results-body');
+    tbody.innerHTML = "";
+    
+    const tablaPuntosRonda = calcularPuntosRonda(respuestas, letraActiva);
+
+    if (letraActiva !== ultimaLetraProcesada && Object.keys(respuestas).length >= 2) {
+        ultimaLetraProcesada = letraActiva;
+        
+        // Buscamos los documentos por el apodo exacto de cada jugador en la ronda y sumamos
+        for (let jugador of Object.keys(tablaPuntosRonda)) {
+            const puntosGanados = tablaPuntosRonda[jugador] || 0;
+            if(puntosGanados > 0) {
+                const qUser = query(collection(db, "usuarios"), where("nombre", "==", jugador));
+                const snapUser = await getDocs(qUser);
+                if(!snapUser.empty) {
+                    await updateDoc(doc(db, "usuarios", snapUser.docs[0].id), {
+                        puntosTotales: increment(puntosGanados)
+                    });
+                }
+            }
+        }
+    }
+
+    Object.keys(respuestas).forEach(jugador => {
+        const r = respuestas[jugador];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${jugador}</strong></td>
+            <td>${r.nombre}</td>
+            <td>${r.apellido}</td>
+            <td>${r.ciudad}</td>
+            <td>${r.fruta}</td>
+            <td>${r.color}</td>
+            <td style="color: #22c55e; font-weight: bold;">${tablaPuntosRonda[jugador] || 0} pts</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 function irAlInicio() {
     if(desescribirListener) desescribirListener();
     idPartidaActiva = null;
-    puntosGlobales = {};
-    marcadorSuperior.innerHTML = "";
     revanchaBox.classList.add('hidden');
     screenResults.classList.add('hidden');
     screenLobby.classList.remove('hidden');
     lobbyOptions.classList.remove('hidden');
     lobbyWaiting.classList.add('hidden');
+    if(auth.currentUser) conectarMisPuntosPermanentes(auth.currentUser.uid);
 }
 
 // --- 6. INICIAR RONDA / MANDAR LETRA ---
@@ -261,12 +363,12 @@ document.getElementById('btn-iniciar-juego').addEventListener('click', async () 
 });
 
 async function iniciarSiguienteRonda() {
-    const letras = "ABCDEFGHIJLMNOPRSTUV";
-    const letraAleatoria = letras[Math.floor(Math.random() * letras.length)];
+    const letters = "ABCDEFGHIJLMNOPRSTUV";
+    const randomLetter = letters[Math.floor(Math.random() * letters.length)];
     
     await updateDoc(doc(db, "partidas", idPartidaActiva), {
         estado: "jugando",
-        letra: letraAleatoria,
+        letra: randomLetter,
         quienPusoStop: "",
         respuestas: {},
         votosRevancha: {},
@@ -305,7 +407,7 @@ async function enviarRespuestasTardias(respuestasActuales, salaRef) {
     }
 }
 
-// --- 8. MOTOR DE CÁLCULO DE PUNTOS ---
+// --- 8. MOTOR DE CÁLCULO DE PUNTOS DE LA RONDA ---
 function calcularPuntosRonda(respuestas, letraActiva) {
     const jugadores = Object.keys(respuestas);
     const puntajes = {};
@@ -335,43 +437,9 @@ function calcularPuntosRonda(respuestas, letraActiva) {
     return puntajes;
 }
 
-// Variable de control local para no sumar doble en la misma pantalla
 let ultimaLetraProcesada = "";
 
-function renderizarTabla(respuestas, letraActiva) {
-    const tbody = document.getElementById('results-body');
-    tbody.innerHTML = "";
-    
-    const tablaPuntosRonda = calcularPuntosRonda(respuestas, letraActiva);
-
-    // Sumar al marcador global solo si cambió la ronda
-    if (letraActiva !== ultimaLetraProcesada && Object.keys(respuestas).length >= 2) {
-        Object.keys(tablaPuntosRonda).forEach(j => {
-            puntosGlobales[j] = (puntosGlobales[j] || 0) + tablaPuntosRonda[j];
-        });
-        ultimaLetraProcesada = letraActiva;
-        actualizarMarcadorSuperior();
-    }
-
-    Object.keys(respuestas).forEach(jugador => {
-        const r = respuestas[jugador];
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><strong>${jugador}</strong></td>
-            <td>${r.nombre}</td>
-            <td>${r.apellido}</td>
-            <td>${r.ciudad}</td>
-            <td>${r.fruta}</td>
-            <td>${r.color}</td>
-            <td style="color: #22c55e; font-weight: bold;">${tablaPuntosRonda[jugador] || 0} pts</td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-// --- 9. CONTROL DE VOTACIÓN DE REVANCHAS ---
-
-// Al dar clic en "Nueva Ronda", el jugador vota que "SÍ"
+// --- 9. VOTACIÓN SEGURA DE REVANCHAS ---
 document.getElementById('btn-volver-lobby').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     
@@ -381,12 +449,10 @@ document.getElementById('btn-volver-lobby').addEventListener('click', async () =
     });
 });
 
-// Si el rival acepta dándole al botón "Sí, ¡Dale!"
 document.getElementById('btn-revancha-si').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     document.getElementById('stop-form').reset();
     
-    // Al aceptar los dos, se reinicia el juego directamente
     await updateDoc(doc(db, "partidas", idPartidaActiva), {
         estado: "esperando",
         estadoRevancha: "",
@@ -395,7 +461,6 @@ document.getElementById('btn-revancha-si').addEventListener('click', async () =>
     });
 });
 
-// Si le da al botón "No, salir"
 document.getElementById('btn-revancha-no').addEventListener('click', async () => {
     if(!idPartidaActiva) return;
     
