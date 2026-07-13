@@ -76,26 +76,30 @@
             <form id="stop-form">
                 <div class="form-group">
                     <label>Nombre</label>
-                    <input type="text" id="ans-nombre" autocomplete="off">
+                    <input type="text" id="ans-nombre" class="input-juego" autocomplete="off">
                 </div>
                 <div class="form-group">
                     <label>Apellido</label>
-                    <input type="text" id="ans-apellido" autocomplete="off">
+                    <input type="text" id="ans-apellido" class="input-juego" autocomplete="off">
                 </div>
                 <div class="form-group">
                     <label>Ciudad / País</label>
-                    <input type="text" id="ans-ciudad" autocomplete="off">
+                    <input type="text" id="ans-ciudad" class="input-juego" autocomplete="off">
                 </div>
                 <div class="form-group">
                     <label>Fruta / Alimento</label>
-                    <input type="text" id="ans-fruta" autocomplete="off">
+                    <input type="text" id="ans-fruta" class="input-juego" autocomplete="off">
                 </div>
                 <div class="form-group">
                     <label>Color</label>
-                    <input type="text" id="ans-color" autocomplete="off">
+                    <input type="text" id="ans-color" class="input-juego" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Animal</label>
+                    <input type="text" id="ans-animal" class="input-juego" autocomplete="off">
                 </div>
                 
-                <button type="button" id="btn-stop" class="btn btn-danger">¡¡STOP!!</button>
+                <button type="button" id="btn-stop" class="btn btn-danger" disabled style="opacity: 0.5; cursor: not-allowed;">¡¡STOP!!</button>
             </form>
         </section>
 
@@ -112,6 +116,7 @@
                             <th>Ciu</th>
                             <th>Fru</th>
                             <th>Col</th>
+                            <th>Ani</th>
                             <th style="color: #f59e0b;">Pts</th>
                         </tr>
                     </thead>
